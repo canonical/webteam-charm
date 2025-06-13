@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "juju called with: $*" >>~/mocks/juju.log
+
+if [[ "$*" == *"refresh"* ]]; then
+    echo "Application refreshed successfully"
+    exit 0
+fi
+
+echo "mock-juju: success"
+exit 0
+

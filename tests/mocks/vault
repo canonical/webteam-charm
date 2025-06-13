@@ -1,0 +1,13 @@
+#!/bin/bash
+echo "vault called with: $*" >>~/mocks/vault.log
+
+if [[ "$*" == *"approle/login"* ]]; then
+    echo '{"auth": {"client_token": "mock_vault_token"}}'
+elif [[ "$*" == *"read"* && *"controllers"* ]]; then
+    echo '{"data": {"controller_config": "'$(echo "mock_controller_config" | base64)'"}}'
+elif [[ "$*" == *"read"* && *"juju"* ]]; then
+    echo '{"data": {"username": "mock_user", "password": "mock_password"}}'
+else
+    echo "Unhandled vault command: $*" >&2
+    exit 1
+fi
