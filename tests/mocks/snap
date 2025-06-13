@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "snap called with: $*" >>~/mocks/snap.log
+
+if [[ "$*" == *"install"* ]]; then
+    echo "mock-snap: installed $2"
+    exit 0
+fi
+
+echo "mock-snap: success"
+exit 0

@@ -1,0 +1,21 @@
+#!/bin/bash
+echo "vault called with: $*" >>~/mocks/vault.log
+
+case "$*" in
+    *"approle/login"*)
+        echo '{"auth": {"client_token": "mock_vault_token"}}'
+        ;;
+    *"read"*"field=username"*)
+        echo 'mock_user'
+        ;;
+    *"read"*"field=password"*)
+        echo 'mock_password'
+        ;;
+    *"read"*"field=controller_config"*)
+        echo "$(echo "mock_controller_config" | base64)"
+        ;;
+    *)
+        echo "Unhandled vault command: $*" >&2
+        exit 1
+        ;;
+esac

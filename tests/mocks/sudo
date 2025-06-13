@@ -1,0 +1,12 @@
+#!/bin/bash
+echo "sudo called with: $*" >>~/mocks/sudo.log
+
+cmd=$1
+shift
+
+if command -v "$cmd" >/dev/null; then
+    "$cmd" "$@"
+else
+    echo "ERROR: No mock for command '$cmd'" >&2
+    exit 1
+fi

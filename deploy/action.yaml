@@ -1,0 +1,99 @@
+name: "Juju Deploy Action"
+description: "Deploy applications to Juju with Vault integration"
+
+inputs:
+  environment:
+    description: "Target environment (Staging or Production)"
+    required: false
+    default: "Production"
+  charm_file_path:
+    description: "Path to the built charm file"
+    required: true
+  image_url:
+    description: "OCI image URL for the rock"
+    required: true
+  juju_model:
+    description: "Juju model name"
+    required: true
+  juju_controller:
+    description: "Juju controller name"
+    required: true
+  juju_version:
+    description: "Juju version to install"
+    required: true
+  vault_addr:
+    description: "Vault server URL"
+    required: true
+  vault_secret_path_role:
+    description: "Vault path for role secrets"
+    required: true
+  vault_secret_path_common:
+    description: "Vault path for common secrets"
+    required: true
+  application_name:
+    description: "Name of the Juju application"
+    required: true
+  resource_name:
+    description: "Resource name for the image"
+    required: false
+    default: "app-image"
+  ghcr_username:
+    description: "GitHub Container Registry username"
+    required: true
+  ghcr_token:
+    description: "GitHub Container Registry token"
+    required: true
+  vault_approle_role_id:
+    description: "Vault AppRole Role ID"
+    required: true
+  vault_approle_secret_id:
+    description: "Vault AppRole Secret ID"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Juju and Vault
+      shell: bash
+      run: |
+        sudo snap install --channel=${{ inputs.juju_version }} juju
+        sudo snap install --classic vault
+      env:
+        JUJU_VERSION: ${{ inputs.juju_version }}
+
+    - name: Configure Vault and Juju
+      shell: bash
+      run: |
+        export TF_VAR_LOGIN_APPROLE_ROLE_ID=${{ inputs.vault_approle_role_id }}
+        export TF_VAR_LOGIN_APPROLE_SECRET_ID=${{ inputs.vault_approle_secret_id }}
+        export VAULT_TOKEN=$(vault write -f -field=token auth/approle/login role_id=${TF_VAR_LOGIN_APPROLE_ROLE_ID} secret_id=${TF_VAR_LOGIN_APPROLE_SECRET_ID})
+        
+        mkdir -p ~/.local/share/juju
+        vault read -field=controller_config "${{ inputs.vault_secret_path_common }}/controllers/${{ inputs.juju_controller }}" | base64 -d > ~/.local/share/juju/controllers.yaml
+        
+        USERNAME=$(vault read -field=username "${{ inputs.vault_secret_path_role }}/juju")
+        PASSWORD=$(vault read -field=password "${{ inputs.vault_secret_path_role }}/juju")
+        
+        printf "controllers:\n  ${{ inputs.juju_controller }}:\n    user: %s\n    password: %s\n" \
+          "$USERNAME" "$PASSWORD" > ~/.local/share/juju/accounts.yaml
+      env:
+        VAULT_ADDR: ${{ inputs.vault_addr }}
+        VAULT_SECRET_PATH_ROLE: ${{ inputs.vault_secret_path_role }}
+        VAULT_SECRET_PATH_COMMON: ${{ inputs.vault_secret_path_common }}
+        JUJU_CONTROLLER: ${{ inputs.juju_controller }}
+
+    - name: Deploy Application
+      shell: bash
+      run: |
+        export JUJU_MODEL=admin/${{ inputs.juju_model }}
+        echo "Deploying ${{ inputs.application_name }} to $JUJU_MODEL"
+
+        echo "{\"ImageName\":\"${{ inputs.image_url }}\", \
+               \"username\":\"${{ inputs.ghcr_username }}\", \
+               \"password\":\"${{ inputs.ghcr_token }}\"}" > image_metadata.json
+
+        juju refresh ${{ inputs.application_name }} \
+          --path="${{ inputs.charm_file_path }}" \
+          --resource ${{ inputs.resource_name }}=image_metadata.json
+      env:
+        JUJU_MODEL: ${{ inputs.juju_model }}

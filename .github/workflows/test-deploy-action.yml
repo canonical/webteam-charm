@@ -1,0 +1,59 @@
+name: Test Deploy Action
+
+on: [workflow_dispatch]
+
+jobs:
+  test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+
+      - name: Setup mocks
+        run: |
+          mkdir -p ~/mocks
+          cp -r ./tests/mocks/* ~/mocks/
+          echo "$HOME/mocks" >> $GITHUB_PATH
+          echo $GITHUB_PATH
+
+      - name: Run deploy action
+        uses: ./deploy
+        with:
+          environment: "Staging"
+          charm_file_path: "./tests/fixtures/test.charm"
+          image_url: "ghcr.io/test:latest"
+          juju_model: "test-model"
+          juju_controller: "test-controller"
+          juju_version: "3.6"
+          vault_addr: "https://vault.example.com"
+          vault_secret_path_role: "secret/role"
+          vault_secret_path_common: "secret/common"
+          application_name: "test-app"
+          vault_approle_role_id: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
+          vault_approle_secret_id: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
+          ghcr_username: ${{ secrets.GHCR_READ_USERNAME }}
+          ghcr_token: ${{ secrets.GHCR_READ_TOKEN }}
+
+      - name: Verify results
+        run: |
+          echo "====================="
+          echo "=== Running tests ==="
+          echo "====================="
+          bats tests/verify_deploy.bats
+
+      - name: Check mock logs
+        if: failure()
+        run: |
+          echo "====================="
+          echo "=== Vault logs ==="
+          echo "====================="
+          cat ~/mocks/vault.log
+          echo "====================="
+          echo "=== Juju logs ==="
+          echo "====================="
+          cat ~/mocks/juju.log
